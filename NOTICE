@@ -1,0 +1,12 @@
+ai-chat-archive
+Copyright 2026 The ai-chat-archive Authors
+
+This product includes software developed by third parties:
+- better-sqlite3-multiple-ciphers (MIT)
+- sqlite-vec (Apache-2.0 / MIT)
+- @node-rs/jieba (MIT)
+- pinyin-pro (MIT)
+- adm-zip (MIT)
+- commander (MIT)
+- zod (MIT)
+- @modelcontextprotocol/sdk (MIT)

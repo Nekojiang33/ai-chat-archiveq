@@ -1,0 +1,20 @@
+import Database from 'better-sqlite3-multiple-ciphers';
+import * as sqliteVec from 'sqlite-vec';
+import fs from 'node:fs';
+import os from 'node:os';
+import path from 'node:path';
+
+console.log('sqlite-vec loadable path:', sqliteVec.getLoadablePath());
+const file = path.join(os.tmpdir(), `aca-vec-${Date.now()}.db`);
+const db = new Database(file);
+db.pragma("key='testpass'");
+sqliteVec.load(db);
+console.log('vec_version:', db.prepare('select vec_version() v').get().v);
+db.exec('CREATE VIRTUAL TABLE v USING vec0(id INTEGER PRIMARY KEY, e float[4])');
+const ins = db.prepare('INSERT INTO v(id, e) VALUES (?, ?)');
+ins.run(1, JSON.stringify([0.1, 0.2, 0.3, 0.4]));
+ins.run(2, JSON.stringify([0.9, 0.8, 0.7, 0.6]));
+const rows = db.prepare('SELECT id, distance FROM v WHERE e MATCH ? ORDER BY distance LIMIT 1').all(JSON.stringify([0.1, 0.2, 0.3, 0.35]));
+console.log('vec search:', JSON.stringify(rows));
+db.close();
+fs.unlinkSync(file);
