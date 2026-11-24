@@ -9,6 +9,8 @@ import { searchMessages, queryMemory, getEntityContext, ensureMessageEmbeddings 
 import { runDistill, distillableCount } from './memory/pipeline.js';
 import { createLlm } from './memory/llm.js';
 import { startMcpServer } from './mcp/server.js';
+import { createUiServer } from './ui/server.js';
+import { settingsPath } from './config/store.js';
 import { packArchive, unpackInto } from './sync/blob.js';
 
 interface GlobalOpts {
@@ -340,6 +342,24 @@ withGlobal(syncCmd.command('unpack'))
     const { cfg, db } = openArchive(o);
     const r = unpackInto(db, blob, o.blobPassword || cfg.password!);
     console.log(`已合并 ${r.conversations} 会话 / 新增 ${r.newMessages} 条消息`);
+  });
+
+withGlobal(program.command('ui'))
+  .description('启动本地可视化界面（瑞士风格，替代终端操作）')
+  .option('--port <n>', '监听端口', '7788')
+  .action(async (opts: GlobalOpts & { port: string }) => {
+    const cfg = loadConfig({ dbPath: opts.db, password: opts.password });
+    requirePassword(cfg);
+    const handle = await createUiServer({ cfg, port: Number(opts.port) });
+    console.log(`可视化界面: ${handle.url}`);
+    console.log(`设置文件: ${settingsPath()}`);
+    console.log('按 Ctrl+C 停止');
+    const stop = async (): Promise<void> => {
+      await handle.close().catch(() => {});
+      process.exit(0);
+    };
+    process.on('SIGINT', () => void stop());
+    process.on('SIGTERM', () => void stop());
   });
 
 program.parseAsync().catch((e) => {

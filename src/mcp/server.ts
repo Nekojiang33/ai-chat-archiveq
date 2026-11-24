@@ -44,6 +44,14 @@ export function createMcpServer(cfg: ArchiveConfig): { server: McpServer; db: Db
         until: z.string().optional().describe('结束时间，ISO 8601'),
         limit: z.number().int().min(1).max(50).default(8).describe('每类结果条数'),
         includeMemory: z.boolean().default(true).describe('是否同时返回蒸馏出的记忆与事实'),
+        weights: z
+          .object({
+            fts: z.number().min(0).max(5).optional(),
+            pinyin: z.number().min(0).max(5).optional(),
+            vec: z.number().min(0).max(5).optional(),
+          })
+          .optional()
+          .describe('检索加权 0–5（关键词/拼音/向量），省略则用已保存设置'),
       },
     },
     async (args) => {
@@ -52,6 +60,7 @@ export function createMcpServer(cfg: ArchiveConfig): { server: McpServer; db: Db
         since: args.since,
         until: args.until,
         limit: args.limit,
+        weights: args.weights,
       });
       let memories: MemoryHit[] = [];
       let facts: FactHit[] = [];

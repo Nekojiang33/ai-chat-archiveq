@@ -1,5 +1,6 @@
 import path from 'node:path';
 import os from 'node:os';
+import { loadSettings, resolveWeights, type RetrievalWeights } from './config/store.js';
 
 export type EmbedProvider = 'hash' | 'openai-compatible' | 'ollama';
 
@@ -43,6 +44,8 @@ export interface ArchiveConfig {
   password?: string;
   llm: LlmConfig;
   embed: EmbedConfig;
+  /** 检索加权（fts/pinyin/vec），来自 UI 设置或默认值 */
+  weights: RetrievalWeights;
 }
 
 export interface ConfigOverrides {
@@ -87,12 +90,13 @@ function parseProvider(raw: string | undefined): EmbedProvider {
 }
 
 export function loadConfig(o: ConfigOverrides = {}): ArchiveConfig {
+  const stored = loadSettings();
   const dbPath = o.dbPath || process.env.ACA_DB || path.join(os.homedir(), '.ai-chat-archive', 'archive.db');
   const password = o.password || process.env.ACA_PASSWORD;
   const llm: LlmConfig = {
-    baseUrl: normalizeBaseUrl(process.env.ACA_LLM_BASE_URL || DEFAULT_OLLAMA_V1),
-    model: process.env.ACA_LLM_MODEL?.trim() || undefined,
-    apiKey: process.env.ACA_LLM_API_KEY?.trim() || undefined,
+    baseUrl: normalizeBaseUrl(process.env.ACA_LLM_BASE_URL || stored.llm?.baseUrl || DEFAULT_OLLAMA_V1),
+    model: (process.env.ACA_LLM_MODEL || stored.llm?.model)?.trim() || undefined,
+    apiKey: (process.env.ACA_LLM_API_KEY || stored.llm?.apiKey)?.trim() || undefined,
     timeoutMs: numEnv('ACA_LLM_TIMEOUT_MS', 180_000),
     retries: numEnv('ACA_LLM_RETRIES', 2),
     maxTokens: process.env.ACA_LLM_MAX_TOKENS ? numEnv('ACA_LLM_MAX_TOKENS', 0) || undefined : undefined,
@@ -100,17 +104,17 @@ export function loadConfig(o: ConfigOverrides = {}): ArchiveConfig {
     jsonMode: boolEnv('ACA_LLM_JSON_MODE', true),
   };
   const embed: EmbedConfig = {
-    provider: parseProvider(process.env.ACA_EMBED_PROVIDER),
-    baseUrl: normalizeBaseUrl(process.env.ACA_EMBED_BASE_URL || process.env.ACA_LLM_BASE_URL || DEFAULT_OLLAMA_V1),
-    model: process.env.ACA_EMBED_MODEL || 'bge-m3',
+    provider: parseProvider(process.env.ACA_EMBED_PROVIDER || stored.embed?.provider),
+    baseUrl: normalizeBaseUrl(process.env.ACA_EMBED_BASE_URL || process.env.ACA_LLM_BASE_URL || stored.llm?.baseUrl || DEFAULT_OLLAMA_V1),
+    model: process.env.ACA_EMBED_MODEL || stored.embed?.model || 'bge-m3',
     apiKey: process.env.ACA_EMBED_API_KEY?.trim() || undefined,
-    dim: numEnv('ACA_EMBED_DIM', 1024),
+    dim: process.env.ACA_EMBED_DIM ? numEnv('ACA_EMBED_DIM', 1024) : stored.embed?.dim ?? 1024,
     batchSize: numEnv('ACA_EMBED_BATCH', 16),
     timeoutMs: numEnv('ACA_EMBED_TIMEOUT_MS', 60_000),
     retries: numEnv('ACA_EMBED_RETRIES', 2),
     keepAlive: process.env.ACA_EMBED_KEEP_ALIVE?.trim() || '30m',
   };
-  return { dbPath, password, llm, embed };
+  return { dbPath, password, llm, embed, weights: resolveWeights() };
 }
 
 export function requirePassword(cfg: ArchiveConfig): string {

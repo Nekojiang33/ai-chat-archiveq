@@ -2,12 +2,15 @@ import type { Db } from '../db/connection.js';
 import { ftsMatchExpr, pinyinMatchExpr, tokenizeArray } from '../db/tokenizer.js';
 import type { Embedder } from './embed.js';
 import { dbKey, getCachedQueryVector, getCachedResult, setCachedQueryVector, setCachedResult } from './cache.js';
+import { resolveWeights, type RetrievalWeights } from '../config/store.js';
 
 export interface SearchOpts {
   source?: string;
   since?: string;
   until?: string;
   limit?: number;
+  /** 检索加权（fts/pinyin/vec），省略时用已存设置或 1:1:1 */
+  weights?: Partial<RetrievalWeights>;
   /** 某一路检索降级时的告警回调（例如嵌入端点不可用） */
   onWarn?: (msg: string) => void;
 }
@@ -120,7 +123,8 @@ export async function ensureMessageEmbeddings(
 
 export async function searchMessages(db: Db, embedder: Embedder, query: string, opts: SearchOpts = {}): Promise<SearchHit[]> {
   const limit = opts.limit ?? 10;
-  const cacheKey = `${dbKey(db)}|s|${query}|${opts.source ?? ''}|${opts.since ?? ''}|${opts.until ?? ''}|${limit}`;
+  const weights = resolveWeights(opts.weights);
+  const cacheKey = `${dbKey(db)}|s|${query}|${opts.source ?? ''}|${opts.since ?? ''}|${opts.until ?? ''}|${limit}|${weights.fts},${weights.pinyin},${weights.vec}`;
   const cached = getCachedResult<SearchHit[]>(cacheKey);
   if (cached) return cached;
 
@@ -166,8 +170,11 @@ export async function searchMessages(db: Db, embedder: Embedder, query: string, 
   const scores = new Map<string, number>();
   const via = new Map<string, Set<string>>();
   for (const { name, ids } of lists) {
+    // 加权 RRF：每路一名按权重缩放，用户可在 UI 里调 per-list 权重
+    const weight = name === 'fts' ? weights.fts : name === 'pinyin' ? weights.pinyin : weights.vec;
+    if (weight <= 0) continue;
     ids.forEach((id, i) => {
-      scores.set(id, (scores.get(id) ?? 0) + 1 / (60 + i + 1));
+      scores.set(id, (scores.get(id) ?? 0) + weight / (60 + i + 1));
       const v = via.get(id) ?? new Set<string>();
       v.add(name);
       via.set(id, v);

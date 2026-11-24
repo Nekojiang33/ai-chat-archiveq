@@ -1,0 +1,461 @@
+<!doctype html>
+<html lang="zh-CN">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <meta name="color-scheme" content="light">
+  <meta name="description" content="本地优先的 AI 对话归档、混合检索与记忆蒸馏界面。">
+  <title>AI Chat Archive — 本地对话归档</title>
+  <link rel="icon" type="image/svg+xml" href="/favicon.svg" />
+  <link rel="stylesheet" href="style.css">
+</head>
+<body>
+  <a class="skip-link" href="#main">跳到主要内容</a>
+
+  <header class="masthead">
+    <div class="container masthead__grid">
+      <div class="brand">
+        <p class="eyebrow">本地 AI 对话归档 / LOCAL-FIRST</p>
+        <h1 class="brand-title">AI CHAT ARCHIVE</h1>
+      </div>
+
+      <div class="status" data-testid="status" aria-live="polite">
+        <div class="status__database">
+          <span class="status-label">数据库路径 / DATABASE</span>
+          <span class="status-path" id="status-db-path" title="尚未连接">连接中…</span>
+        </div>
+        <dl class="status__figures">
+          <div class="status-figure">
+            <dt class="status-label">会话 / CHATS</dt>
+            <dd class="status-number" id="status-conversations">—</dd>
+          </div>
+          <div class="status-figure">
+            <dt class="status-label">消息 / MESSAGES</dt>
+            <dd class="status-number" id="status-messages">—</dd>
+          </div>
+          <div class="status-figure">
+            <dt class="status-label">向量 / VECTORS</dt>
+            <dd class="status-number" id="status-embedded">—</dd>
+          </div>
+          <div class="status-figure">
+            <dt class="status-label">OLLAMA</dt>
+            <dd class="status-ollama" id="status-ollama">检测中…</dd>
+          </div>
+        </dl>
+        <p class="status-alert" id="status-alert" role="status" hidden></p>
+      </div>
+    </div>
+  </header>
+
+  <main class="container" id="main" tabindex="-1">
+    <!-- 01 检索 -->
+    <section class="block" id="search" aria-labelledby="search-heading">
+      <div class="block-head">
+        <h2 class="block-title" id="search-heading">
+          <span class="block-index">01</span>
+          <span class="block-sep" aria-hidden="true">—</span>
+          <span class="block-name">检索</span>
+        </h2>
+        <p class="block-caption">混合检索 / HYBRID RETRIEVAL</p>
+      </div>
+
+      <div class="controls">
+        <div class="field">
+          <label class="field-label" for="query-input">查询 / QUERY</label>
+          <input
+            class="query-input"
+            id="query-input"
+            data-testid="query-input"
+            type="search"
+            autocomplete="off"
+            spellcheck="false"
+            placeholder="关键词、拼音或语义描述"
+            aria-describedby="query-hint"
+          >
+          <p class="field-hint" id="query-hint">Enter 也可以检索。结果将按加权 RRF 融合排序。</p>
+        </div>
+
+        <fieldset class="weights">
+          <legend class="field-label">检索权重 / WEIGHTS</legend>
+          <div class="weight-row">
+            <label class="weight-name" for="weight-fts">关键词 <span>FTS</span></label>
+            <input
+              id="weight-fts"
+              data-testid="weight-fts"
+              class="range"
+              type="range"
+              min="0"
+              max="2"
+              step="0.1"
+              value="1"
+            >
+            <output class="weight-value" id="weight-fts-value" for="weight-fts">1.0</output>
+          </div>
+          <div class="weight-row">
+            <label class="weight-name" for="weight-pinyin">拼音 <span>PINYIN</span></label>
+            <input
+              id="weight-pinyin"
+              data-testid="weight-pinyin"
+              class="range"
+              type="range"
+              min="0"
+              max="2"
+              step="0.1"
+              value="1"
+            >
+            <output class="weight-value" id="weight-pinyin-value" for="weight-pinyin">1.0</output>
+          </div>
+          <div class="weight-row">
+            <label class="weight-name" for="weight-vec">向量 <span>VEC</span></label>
+            <input
+              id="weight-vec"
+              data-testid="weight-vec"
+              class="range"
+              type="range"
+              min="0"
+              max="2"
+              step="0.1"
+              value="1"
+            >
+            <output class="weight-value" id="weight-vec-value" for="weight-vec">1.0</output>
+          </div>
+          <p class="field-hint weight-note">加权 RRF · 三路排序按权重融合，数值越大权重越高。</p>
+        </fieldset>
+
+        <div class="actions">
+          <button class="btn btn--primary btn--wide" id="btn-search" data-testid="btn-search" type="button">检索</button>
+        </div>
+        <p class="inline-log" id="search-log" role="status" aria-live="polite"></p>
+      </div>
+
+      <div class="outputs">
+        <div class="output-head">
+          <h3 class="output-title">对话命中 / RESULTS</h3>
+          <span class="output-meta" id="search-summary">—</span>
+        </div>
+        <div class="result-list" id="results" data-testid="results" aria-live="polite">
+          <p class="empty">等待检索</p>
+        </div>
+
+        <div class="subgrid">
+          <section class="sub-block" aria-labelledby="memories-heading">
+            <div class="output-head output-head--small">
+              <h3 class="output-title" id="memories-heading">记忆 / MEMORY</h3>
+              <span class="output-meta" id="memories-count">—</span>
+            </div>
+            <div class="stack" id="memories" data-testid="memories">
+              <p class="empty empty--small">等待检索</p>
+            </div>
+          </section>
+          <section class="sub-block" aria-labelledby="facts-heading">
+            <div class="output-head output-head--small">
+              <h3 class="output-title" id="facts-heading">事实 / FACTS</h3>
+              <span class="output-meta" id="facts-count">—</span>
+            </div>
+            <div class="stack" id="facts" data-testid="facts">
+              <p class="empty empty--small">等待检索</p>
+            </div>
+          </section>
+        </div>
+      </div>
+    </section>
+
+    <!-- 02 导入与索引 -->
+    <section class="block" id="import" aria-labelledby="import-heading">
+      <div class="block-head">
+        <h2 class="block-title" id="import-heading">
+          <span class="block-index">02</span>
+          <span class="block-sep" aria-hidden="true">—</span>
+          <span class="block-name">导入与索引</span>
+        </h2>
+        <p class="block-caption">摄入 / INGESTION</p>
+      </div>
+
+      <div class="controls">
+        <div class="field">
+          <label class="field-label" for="import-paths">文件 / 目录路径</label>
+          <textarea
+            class="textarea"
+            id="import-paths"
+            data-testid="import-paths"
+            rows="8"
+            spellcheck="false"
+            placeholder="每行一个文件或目录路径&#10;例如 C:\Users\me\Exports\chatgpt"
+            aria-describedby="import-hint"
+          ></textarea>
+          <p class="field-hint" id="import-hint">每行一条路径，支持常见 AI 对话导出格式。</p>
+        </div>
+
+        <div class="actions">
+          <button class="btn btn--primary" id="btn-import" data-testid="btn-import" type="button">导入</button>
+          <button class="btn" id="btn-index" data-testid="btn-index" type="button">补齐向量</button>
+        </div>
+
+        <pre class="log log--compact" id="import-log" role="status" aria-live="polite" data-placeholder="操作信息与错误将显示于此"></pre>
+      </div>
+
+      <div class="outputs">
+        <div class="output-head">
+          <h3 class="output-title">导入结果 / IMPORT</h3>
+          <span class="output-meta" id="import-status">等待导入</span>
+        </div>
+        <dl class="stat-row" id="import-result">
+          <div class="stat">
+            <dt class="stat-label">文件 / FILES</dt>
+            <dd class="stat-value" id="import-files">—</dd>
+          </div>
+          <div class="stat">
+            <dt class="stat-label">会话 / CONVERSATIONS</dt>
+            <dd class="stat-value" id="import-conversations">—</dd>
+          </div>
+          <div class="stat">
+            <dt class="stat-label">新消息 / NEW MESSAGES</dt>
+            <dd class="stat-value" id="import-new-messages">—</dd>
+          </div>
+        </dl>
+        <p class="note">统计由服务端返回；补齐向量只建立嵌入，不修改原始消息。</p>
+      </div>
+    </section>
+
+    <!-- 03 蒸馏 -->
+    <section class="block" id="distill" aria-labelledby="distill-heading">
+      <div class="block-head">
+        <h2 class="block-title" id="distill-heading">
+          <span class="block-index">03</span>
+          <span class="block-sep" aria-hidden="true">—</span>
+          <span class="block-name">蒸馏</span>
+        </h2>
+        <p class="block-caption">记忆抽取 / DISTILLATION</p>
+      </div>
+
+      <div class="controls">
+        <div class="field">
+          <label class="field-label" for="distill-provider">提供商 / PROVIDER</label>
+          <select class="select" id="distill-provider" data-testid="distill-provider">
+            <option value="ollama">本地 Ollama</option>
+            <option value="cloud">云端 API</option>
+          </select>
+        </div>
+
+        <div class="field" data-cloud-only hidden>
+          <label class="field-label" for="distill-baseurl">Base URL</label>
+          <input
+            class="input"
+            id="distill-baseurl"
+            data-testid="distill-baseurl"
+            type="url"
+            autocomplete="off"
+            spellcheck="false"
+            placeholder="https://api.example.com/v1"
+          >
+        </div>
+
+        <div class="field">
+          <label class="field-label" for="distill-model" id="distill-model-label">本地模型 / OLLAMA MODEL</label>
+          <input
+            class="input"
+            id="distill-model"
+            data-testid="distill-model"
+            type="text"
+            autocomplete="off"
+            spellcheck="false"
+            placeholder="qwen2.5:3b"
+          >
+        </div>
+
+        <div class="field" data-cloud-only hidden>
+          <label class="field-label" for="distill-apikey">API Key</label>
+          <input
+            class="input"
+            id="distill-apikey"
+            data-testid="distill-apikey"
+            type="password"
+            autocomplete="off"
+            placeholder="留空则使用已保存的 Key"
+          >
+        </div>
+
+        <div class="field-grid">
+          <div class="field">
+            <label class="field-label" for="distill-limit">Limit</label>
+            <input class="input" id="distill-limit" type="number" min="1" step="1" inputmode="numeric" placeholder="不限">
+          </div>
+          <div class="field">
+            <label class="field-label" for="distill-maxchars">Max chars</label>
+            <input class="input" id="distill-maxchars" type="number" min="1" step="1" inputmode="numeric" placeholder="默认 8000">
+          </div>
+        </div>
+
+        <div class="actions">
+          <button class="btn btn--primary" id="btn-distill" data-testid="btn-distill" type="button">开始蒸馏</button>
+        </div>
+        <p class="field-hint">云端 API Key 仅提交给本机服务端，不会写入前端存储。</p>
+      </div>
+
+      <div class="outputs">
+        <div class="output-head">
+          <h3 class="output-title">蒸馏输出 / DISTILL</h3>
+          <span class="output-meta" id="distill-mode">本地 Ollama</span>
+        </div>
+        <pre class="log log--tall" id="distill-log" role="status" aria-live="polite" data-placeholder="等待蒸馏输出"></pre>
+      </div>
+    </section>
+
+    <!-- 04 模型 -->
+    <section class="block" id="models-section" aria-labelledby="models-heading">
+      <div class="block-head">
+        <h2 class="block-title" id="models-heading">
+          <span class="block-index">04</span>
+          <span class="block-sep" aria-hidden="true">—</span>
+          <span class="block-name">模型（Qwen）</span>
+        </h2>
+        <p class="block-caption">安装 / OLLAMA PULL</p>
+      </div>
+
+      <div class="controls">
+        <div class="field">
+          <p class="field-label">Qwen 预设 / PRESETS</p>
+          <div class="preset-grid" role="group" aria-label="Qwen 模型预设">
+            <button class="preset" type="button" data-model="qwen2.5:1.5b">
+              <span class="preset__model">qwen2.5:1.5b</span>
+              <span class="preset__note">轻量 · 1.5B</span>
+            </button>
+            <button class="preset" type="button" data-model="qwen2.5:3b">
+              <span class="preset__model">qwen2.5:3b</span>
+              <span class="preset__note">均衡 · 3B</span>
+            </button>
+            <button class="preset" type="button" data-model="qwen2.5:7b">
+              <span class="preset__model">qwen2.5:7b</span>
+              <span class="preset__note">高精度 · 7B</span>
+            </button>
+            <button class="preset" type="button" data-model="qwen3:4b">
+              <span class="preset__model">qwen3:4b</span>
+              <span class="preset__note">Qwen3 · 4B</span>
+            </button>
+          </div>
+        </div>
+
+        <div class="field">
+          <label class="field-label" for="model-input">自定义模型 / CUSTOM</label>
+          <div class="input-actions">
+            <input
+              class="input"
+              id="model-input"
+              data-testid="model-input"
+              type="text"
+              autocomplete="off"
+              spellcheck="false"
+              placeholder="例如 qwen2.5:3b"
+            >
+            <button class="btn btn--primary" id="btn-pull-model" data-testid="btn-pull-model" type="button">安装</button>
+          </div>
+          <p class="field-hint">通过本机 Ollama 拉取；日志以 NDJSON 流实时追加。</p>
+        </div>
+      </div>
+
+      <div class="outputs">
+        <div class="output-head">
+          <h3 class="output-title">已安装模型 / INSTALLED</h3>
+          <span class="output-meta" id="models-summary">加载中</span>
+        </div>
+        <ul class="model-list" id="models" data-testid="models" aria-live="polite">
+          <li class="empty empty--item">加载中…</li>
+        </ul>
+
+        <div class="output-head output-head--log">
+          <h3 class="output-title">安装日志 / PULL LOG</h3>
+          <span class="output-meta">NDJSON</span>
+        </div>
+        <pre class="log log--tall" id="log" data-testid="log" role="status" aria-live="polite" data-placeholder="等待安装输出"></pre>
+      </div>
+    </section>
+
+    <!-- 05 设置 -->
+    <section class="block" id="settings" aria-labelledby="settings-heading">
+      <div class="block-head">
+        <h2 class="block-title" id="settings-heading">
+          <span class="block-index">05</span>
+          <span class="block-sep" aria-hidden="true">—</span>
+          <span class="block-name">设置</span>
+        </h2>
+        <p class="block-caption">持久化 / PREFERENCES</p>
+      </div>
+
+      <div class="controls">
+        <div class="field">
+          <p class="field-label">检索权重 / RETRIEVAL WEIGHTS</p>
+          <div class="field-grid field-grid--three">
+            <div class="field">
+              <label class="field-label field-label--sub" for="config-fts">关键词 FTS</label>
+              <input class="input" id="config-fts" type="number" min="0" max="2" step="0.1" inputmode="decimal" value="1">
+            </div>
+            <div class="field">
+              <label class="field-label field-label--sub" for="config-pinyin">拼音 PINYIN</label>
+              <input class="input" id="config-pinyin" type="number" min="0" max="2" step="0.1" inputmode="decimal" value="1">
+            </div>
+            <div class="field">
+              <label class="field-label field-label--sub" for="config-vec">向量 VEC</label>
+              <input class="input" id="config-vec" type="number" min="0" max="2" step="0.1" inputmode="decimal" value="1">
+            </div>
+          </div>
+        </div>
+
+        <div class="field">
+          <p class="field-label">LLM 提供商 / LLM PROVIDER</p>
+          <div class="field">
+            <label class="field-label field-label--sub" for="config-baseurl">Base URL</label>
+            <input class="input" id="config-baseurl" type="url" autocomplete="off" spellcheck="false" placeholder="http://127.0.0.1:11434">
+          </div>
+          <div class="field">
+            <label class="field-label field-label--sub" for="config-model">模型 / MODEL</label>
+            <input class="input" id="config-model" type="text" autocomplete="off" spellcheck="false" placeholder="qwen2.5:3b">
+          </div>
+          <div class="field">
+            <label class="field-label field-label--sub" for="config-apikey">API Key</label>
+            <input class="input" id="config-apikey" type="password" autocomplete="off" placeholder="留空则不修改">
+          </div>
+        </div>
+
+        <div class="actions">
+          <button class="btn btn--primary" id="btn-save-config" data-testid="btn-save-config" type="button">保存设置</button>
+        </div>
+        <pre class="log log--compact" id="config-log" role="status" aria-live="polite" data-placeholder="配置保存状态"></pre>
+      </div>
+
+      <div class="outputs">
+        <div class="output-head">
+          <h3 class="output-title">当前生效 / ACTIVE</h3>
+          <span class="output-meta">只读</span>
+        </div>
+        <dl class="readout">
+          <div class="readout__row">
+            <dt>数据库 / DB</dt>
+            <dd class="mono" id="settings-db-path">加载中…</dd>
+          </div>
+          <div class="readout__row">
+            <dt>嵌入提供商 / EMBED PROVIDER</dt>
+            <dd id="settings-embed-provider">—</dd>
+          </div>
+          <div class="readout__row">
+            <dt>嵌入模型 / EMBED MODEL</dt>
+            <dd id="settings-embed-model">—</dd>
+          </div>
+          <div class="readout__row">
+            <dt>向量维度 / DIMENSION</dt>
+            <dd id="settings-embed-dim">—</dd>
+          </div>
+        </dl>
+        <p class="note">检索权重与 LLM 提供商配置由服务端持久化；嵌入配置为只读。</p>
+      </div>
+    </section>
+  </main>
+
+  <footer class="site-footer">
+    <div class="container site-footer__inner">
+      <p class="footer-line">© 2026 AI CHAT ARCHIVE · 本地优先 · <span>Swiss International Style</span></p>
+    </div>
+  </footer>
+
+  <script src="app.js" defer></script>
+</body>
+</html>

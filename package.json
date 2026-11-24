@@ -12,13 +12,15 @@
     "build": "tsc",
     "dev": "tsx src/cli.ts",
     "doctor": "tsx src/cli.ts doctor",
+    "ui": "tsx src/cli.ts ui",
     "test": "tsx test/e2e.ts",
     "test:mcp": "tsx test/mcp.ts",
     "test:cli": "tsx test/cli.ts",
     "test:dsh": "tsx test/dsh.ts",
+    "test:ui": "tsx test/ui.ts",
     "bench": "tsx test/bench.ts",
     "test:ollama": "tsx test/ollama.ts",
-    "test:all": "tsx test/e2e.ts && tsx test/dsh.ts && tsx test/mcp.ts && tsx test/cli.ts && tsx test/ollama.ts"
+    "test:all": "tsx test/e2e.ts && tsx test/dsh.ts && tsx test/ui.ts && tsx test/mcp.ts && tsx test/cli.ts && tsx test/ollama.ts"
   },
   "engines": {
     "node": ">=18.17"

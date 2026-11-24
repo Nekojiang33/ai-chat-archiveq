@@ -194,12 +194,53 @@ aca-dsh-mcp-bundle/
 
 | 工具 | 用途 |
 |---|---|
-| `recall(query, source?, since?, until?, limit?, includeMemory?)` | 一次取回对话片段 + 蒸馏记忆与事实（关键词+拼音+向量，RRF 融合） |
+| `recall(query, source?, since?, until?, limit?, includeMemory?, weights?)` | 一次取回对话片段 + 蒸馏记忆与事实（关键词+拼音+向量加权 RRF） |
 | `entity(name?, type?, limit?)` | 指定 `name` → 实体上下文（事实+来源对话）；省略 → 实体列表 |
 | `remember(content, layer?, tags?, importance?)` | 手动写入记忆并立即向量化 |
 | `maintain(action: status\|distill, limit?)` | `status` 统计；`distill` 增量蒸馏 |
 
 > 早期版本的 7 个工具（search_conversations / query_memory / get_context / list_entities / add_memory / distill / archive_status）已合并为上述 4 个：schema 体积降约 43%，且一次 `recall` 就能拿到“原文 + 记忆 + 事实”，减少多轮工具往返。
+
+## 可视化界面（UI）
+
+终端命令全部保留，但日常操作可以完全在浏览器里完成：零前端依赖、单页应用，视觉遵循**瑞士国际主义风格**（白底黑字、唯一强调色 `#E4002B`、12 列栅格、8px 间距基准、无圆角无阴影）。
+
+```bash
+npm run build
+node dist/cli.js ui --port 7788     # 或 npm run ui
+# → 可视化界面: http://127.0.0.1:7788
+```
+
+![总览](docs/ui-overview.png)
+
+五个编号区块对应五类操作：
+
+| 区块 | 能做什么 |
+|---|---|
+| **01 检索** | 关键词 / 拼音 / 语义三路**加权 RRF**（0–2 滑杆，实时生效）；结果带 score 与命中路径徽标，同屏显示记忆与事实 |
+| **02 导入与索引** | 粘贴文件或目录路径批量导入（支持 zip / json / jsonl / jsonl.zstd / 目录）；一键补齐缺失向量 |
+| **03 蒸馏** | 本地 Ollama 或**云端 API**（baseUrl + model + API Key）；limit / maxChars 可调 |
+| **04 模型（Qwen）** | Qwen 预设一键安装（`qwen2.5:1.5b` / `3b` / `7b`、`qwen3:4b`）或任意模型名；安装进度 NDJSON 实时回显 |
+| **05 设置** | 权重与提供商保存到 `~/.ai-chat-archive/config.json`（环境变量优先），并显示当前生效配置 |
+
+![检索结果](docs/ui-search.png)
+
+**权重怎么生效**：三路召回各自按 `weight / (60 + rank)` 累加（加权 RRF）。把某一路调到 0 就等于关掉该路；UI、CLI 与 MCP 的 `recall` 共用同一份权重（显式传参 > 已保存设置 > 1:1:1）。
+
+**云端蒸馏**：任何 OpenAI 兼容端点（DeepSeek、Moonshot、OpenAI…）均可；API Key 只在这次请求里从浏览器传给本机服务端，不落盘、不写日志。需要长期复用时，在「05 设置」里显式保存（写入本地 `config.json`）。
+
+**本地 HTTP 接口**（只监听 `127.0.0.1`，无鉴权，请勿暴露到公网）：
+
+| 方法 | 路径 | 说明 |
+|---|---|---|
+| GET | `/api/state` | 统计 / 生效权重 / Ollama 状态 / 模型预设 |
+| POST | `/api/search` | `{query, limit?, source?, weights?, includeMemory?}` |
+| POST | `/api/import` / `/api/index` | 导入路径 / 补齐向量 |
+| POST | `/api/distill` | `{provider: "ollama"\|"cloud", baseUrl?, model?, apiKey?, limit?, maxChars?}` |
+| GET / PUT | `/api/config` | 读取 / 保存权重与提供商（Key 回显为 `hasKey`） |
+| GET / POST | `/api/models` / `/api/models/pull` | 已装模型列表 / NDJSON 流式安装 |
+| GET | `/api/entity` | 实体列表（`?list=1`）或上下文（`?name=`） |
+| POST | `/api/remember` | 手动写入记忆并向量化 |
 
 ## 命令概览
 
@@ -215,6 +256,7 @@ aca-dsh-mcp-bundle/
 | `status` | 归档统计 |
 | `doctor` | 全链路自检（数据库/加密/维度/端点/模型/JSON 往返） |
 | `mcp` | stdio 启动 MCP server |
+| `ui [--port]` | 启动本地可视化界面（瑞士风格，替代终端操作） |
 | `sync pack <out>` / `sync unpack <blob>` | 加密打包 / 幂等合并（支持 `--blob-password`） |
 
 ## 配置
@@ -222,6 +264,9 @@ aca-dsh-mcp-bundle/
 | 环境变量 | 默认 | 说明 |
 |---|---|---|
 | `ACA_DB` | `~/.ai-chat-archive/archive.db` | 数据库路径 |
+| `ACA_HOME` | `~/.ai-chat-archive` | 设置文件（`config.json`）与默认数据库所在目录 |
+| `ACA_UI_PORT` | `7788` | `ui` 命令默认端口 |
+| `ACA_OLLAMA_BASE` | 由 `ACA_EMBED_BASE_URL` 推导 | UI 探测/安装模型用的 Ollama 原生地址 |
 | `ACA_PASSWORD` | — | 数据库密码（CLI 也可 `--password`） |
 | `ACA_LLM_BASE_URL` | `http://127.0.0.1:11434/v1` | 蒸馏 LLM（OpenAI 兼容，默认 Ollama） |
 | `ACA_LLM_MODEL` | 未配置则蒸馏禁用 | 如 `qwen2.5:3b` |
@@ -305,13 +350,14 @@ sync pack/unpack（AES-256-GCM blob，哑存储零知识）
 
 ```bash
 npm run build
-npm run test:all      # e2e 24 + dsh 15 + MCP 11 + CLI 10 + 真实 Ollama 27（合计 87）
+npm run test:all      # e2e 24 + dsh 15 + UI 22 + MCP 11 + CLI 10 + 真实 Ollama 27（合计 109）
 ```
 
 | 套件 | 项数 | 依赖 |
 |---|---|---|
 | `npm test`（e2e） | 24 | 无（mock LLM 服务） |
 | `npm run test:dsh` | 15 | 无（DSH 会话解析 + 多帧 zstd） |
+| `npm run test:ui` | 22 | 无（内置假 Ollama，含加权检索/配置落盘/流式安装） |
 | `npm run test:mcp` | 11 | 无 |
 | `npm run test:cli` | 10 | 需先 `npm run build` |
 | `npm run test:ollama` | 27 | 需运行中的 Ollama + `qwen2.5:3b` + `bge-m3` |
