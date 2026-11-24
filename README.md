@@ -1,6 +1,6 @@
 # ai-chat-archive
 
-AI 对话本地归档：把 ChatGPT / Claude / Claude Code 的对话导出变成**可检索、可蒸馏、可跨设备同步**的私有知识库，并通过 **MCP server** 供任意 AI 客户端（Claude Desktop、Cursor、Cline、Trae 等）调用。
+AI 对话本地归档：把 ChatGPT / Claude / Claude Code 的对话导出变成**可检索、可蒸馏、可跨设备同步**的私有知识库，并通过 **MCP server** 供任意 AI 客户端（Claude Desktop、 deepseekharness Cursor、Cline、Trae 等）调用。
 
 对应技术方案见《AI对话本地归档技术栈白皮书》（阶段一 MVP 实现，已接入真实 Ollama 本地模型验证）。
 
